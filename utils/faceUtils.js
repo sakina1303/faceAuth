@@ -1,46 +1,59 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as jpeg from 'jpeg-js';
+import { Buffer } from 'buffer';
 
 // Improved face matching: compare pixels (MSE)
 export async function compareFaces(uri1, uri2) {
-  console.log('Starting compareFaces...');
+  console.log('Starting compareFaces with pixel comparison...');
   try {
-    // Resize images to small size for quick comparison but large enough for color info (Wait 50x50)
-    // We intentionally don't use base64 here to avoid string logic.
-    // However, ImageManipulator returns base64 or file. Reading pixels is hard in pure Expo without native modules.
-    // Workaround: We will use base64 but decode simple string differences or use a simpler heuristic?
-    // Actually, comparing raw base64 strings is wrong because encoding changes.
-    // Let's stick to the brief's requirement of "demo" but make it slightly smarter:
-    // We can't easily get pixel data in managed Expo without other libraries.
-    // Let's rely on a very low resolution fuzzier match.
+    // 1. Resize to small size (32x32) for performance and alignment tolerance
+    // 32x32 is sufficient for general structure matching
+    const size = 32;
 
-    // Resize to 8x8 (64 pixels).
-    console.log('Manipulating image 1:', uri1);
-    const manip1 = await ImageManipulator.manipulateAsync(uri1, [{ resize: { width: 8, height: 8 } }], { base64: true });
-    console.log('Manipulating image 2:', uri2);
-    const manip2 = await ImageManipulator.manipulateAsync(uri2, [{ resize: { width: 8, height: 8 } }], { base64: true });
+    const manip1 = await ImageManipulator.manipulateAsync(uri1, [{ resize: { width: size, height: size } }], { base64: true });
+    const manip2 = await ImageManipulator.manipulateAsync(uri2, [{ resize: { width: size, height: size } }], { base64: true });
 
-    // "Smart" string comparison - Hamming distance of the base64 string is better than equality,
-    // but base64 is ASCII.
-    // Alternative: Just lower the threshold significantly for the demo if using exact string matches.
-    // The previous 0.67 was low.
+    // 2. Decode JPEGs to get raw pixel data
+    const buffer1 = Buffer.from(manip1.base64, 'base64');
+    const buffer2 = Buffer.from(manip2.base64, 'base64');
 
-    // Let's try a diff algorithm on the base64 string which somewhat correlates to data difference.
-    let diffs = 0;
-    const s1 = manip1.base64;
-    const s2 = manip2.base64;
-    const len = Math.min(s1.length, s2.length);
+    const data1 = jpeg.decode(buffer1, { useTArray: true });
+    const data2 = jpeg.decode(buffer2, { useTArray: true });
 
-    for (let i = 0; i < len; i++) {
-      if (s1[i] !== s2[i]) diffs++;
+    if (data1.width !== data2.width || data1.height !== data2.height) {
+      console.warn('Image dimensions mismatch');
+      return false;
     }
 
-    // Normalize diffs
-    const similarity = 1 - (diffs / len);
-    console.log('Similarity calc:', similarity, '(diffs:', diffs, 'len:', len, ')');
+    // 3. Calculate Mean Squared Error (MSE)
+    let mse = 0;
+    const pixels = data1.width * data1.height;
+    // data.data is RGBA (4 bytes per pixel)
+    const len = pixels * 4;
 
-    // Lower threshold to 0.60 for this rough heuristic
-    return similarity > 0.60;
+    for (let i = 0; i < len; i++) {
+      // Skip Alpha channel (every 4th byte) if we want, but usually it's 255
+      if ((i + 1) % 4 === 0) continue;
+
+      const diff = data1.data[i] - data2.data[i];
+      mse += diff * diff;
+    }
+
+    // Average per color channel (R,G,B) = 3 channels
+    mse = mse / (pixels * 3);
+
+    console.log('MSE:', mse);
+
+    // Threshold: Lower MSE means more similar.
+    // 0 = identical. 
+    // Typical values for same face often < 500-1000 depending on lighting.
+    // Different faces often > 2000-3000.
+    // Let's pick a conservative threshold first.
+    const threshold = 1500;
+
+    return mse < threshold;
+
   } catch (e) {
     console.error('Error in compareFaces:', e);
     return false;
