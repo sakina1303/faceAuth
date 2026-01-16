@@ -4,9 +4,9 @@ A modern React Native (Expo) demo application for face enrollment and authentica
 
 ##  Features
 
--   ** Face Enrollment**: Capture your face using the front camera with a guided overlay.
--   ** Face Verification**: Authenticate by comparing a live capture against the enrolled face.
--   ** Modern UI/UX**:
+-   **Face Enrollment**: Capture your face using the front camera with a guided overlay.
+-   **Face Verification**: Authenticate by comparing a live capture against the enrolled face.
+-   **Modern UI/UX**:
     -   **Gradient Animations**: Smooth, animated results screen.
     -   **Custom Theming**: Consistent Blue/White/Gray design system (`#4A90E2`).
     -   **Feedback**: Haptic-like visuals and clear success/failure states.
